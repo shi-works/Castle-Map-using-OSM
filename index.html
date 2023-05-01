@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Castle Map using OSM</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <!-- MapLibre -->
+    <script src='https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src="https://unpkg.com/pmtiles@2.7.0/dist/index.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <style>
+        .map-overlay {
+            font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            position: absolute;
+            width: 200px;
+            bottom: 30px;
+            left: 0;
+            padding: 10px;
+        }
+
+        .map-overlay .map-overlay-inner {
+            background-color: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            padding: 10px;
+            margin-bottom: 5px;
+        }
+
+        .map-overlay h3 {
+            line-height: 12px;
+            display: block;
+            margin: 0 0 10px;
+        }
+
+        .map-overlay .legend .bar {
+            height: 10px;
+            width: 100%;
+            background: linear-gradient(to right, #CCFFCC, #00ff00);
+        }
+
+        .map-overlay input {
+            background-color: transparent;
+            display: inline-block;
+            width: 100%;
+            position: relative;
+            margin: 0;
+            cursor: ew-resize;
+        }
+
+        .maplibregl-popup .maplibregl-popup-content {
+            padding: 8px 10px;
+            font: 12px/14px Arial, Helvetica, sans-serif;
+            color: black;
+            background: white;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.9);
+            border-radius: 5px;
+            width: 200px;
+            height: 50px;
+            /*overflow: scroll;*/
+        }
+
+        .label-large {
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        th,
+        td {
+            border: solid 1px;
+        }
+
+        table {
+            font-size: 8pt;
+            width: 160px;
+            border-collapse: collapse;
+        }
+
+        .legend {
+            background-color: #fff;
+            border-radius: 3px;
+            bottom: 50px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
+            font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            padding: 10px;
+            position: absolute;
+            right: 10px;
+            z-index: 1;
+            line-height: 16px;
+            height: 60px;
+        }
+
+        .legend h4 {
+            margin: 0 0 10px;
+        }
+
+        .legend div span {
+            border-radius: 50%;
+            display: inline-block;
+            height: 15px;
+            margin-right: 10px;
+            width: 15px;
+            color: orangered
+        }
+
+        .circle {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .square {
+            width: 10px;
+            height: 10px;
+        }
+    </style>
+
+    <div id="map"></div>
+    <div id='county-legend' class='legend'>
+        <h4>凡例</h4>
+        <div class="circle" style='background-color: rgb(255, 50, 255);display: inline-block;'></div>
+        <span style="display: inline-block; margin-left: 5px;">Castle</span><br>
+        <div class="square" style='background-color: rgba(255, 191, 0, 0.2);display: inline-block;'></div>
+        <span style="display: inline-block; margin-left: 5px;">人口集中地区（2020年）</span>
+    </div>
+    <div class="map-overlay top">
+        <div class="map-overlay-inner">
+            <label>空中写真 不透明度: <span id="slider-opacity-value">50%</span></label>
+            <input id="slider-opacity" type="range" min="0" max="100" step="0" value="50">
+        </div>
+    </div>
+    <script type="text/javascript">
+        // add the PMTiles plugin to the maplibregl global.
+        let protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol("pmtiles", protocol.tile);
+
+        let PMTILES_DID_URL = "https://web-map-maplibre.s3.ap-northeast-1.amazonaws.com/traffic-signal-cycle-map/data/2020_did_ddsw_01-47_JGD2011.pmtiles";
+        const pd = new pmtiles.PMTiles(PMTILES_DID_URL)
+
+        // this is so we share one instance across the JS code and the map renderer
+        protocol.add(pd);
+
+        var map = new maplibregl.Map({
+            container: 'map',
+            style: './dark.json',
+            center: [135.557, 34.864], // 中心座標
+            zoom: 8, // ズームレベル
+            pitch: 0, // 傾き
+            hash: true,
+            // 既存Attributionを非表示
+            attributionControl: false
+        })
+
+        // ズーム・回転
+        map.addControl(new maplibregl.NavigationControl());
+
+        // フルスクリーンモードのオンオフ
+        map.addControl(new maplibregl.FullscreenControl());
+
+        // 現在位置表示
+        map.addControl(new maplibregl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: false
+            },
+            fitBoundsOptions: { maxZoom: 18 },
+            trackUserLocation: true,
+            showUserLocation: true
+        }));
+
+        // スケール表示
+        map.addControl(new maplibregl.ScaleControl({
+            maxWidth: 200,
+            unit: 'metric'
+        }));
+
+        // Attributionを折りたたみ表示
+        map.addControl(new maplibregl.AttributionControl({
+            compact: true,
+            customAttribution: '（<a href="https://twitter.com/syanseto" target="_blank">Twitter</a> | <a href="https://github.com/shi-works/bikeshare-map" target="_blank">Github</a>） '
+        }));
+
+        const sliderOpactiy = document.getElementById('slider-opacity');
+        const sliderOpactiyValue = document.getElementById('slider-opacity-value');
+
+        map.on('load', () => {
+            // 全国最新写真（シームレス）
+            map.addSource('seamlessphoto', {
+                type: 'raster',
+                tiles: ['https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg'],
+                tileSize: 256,
+                attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html#seamlessphoto">全国最新写真（シームレス）</a>'
+            });
+
+            map.addLayer({
+                id: 'seamlessphoto',
+                type: 'raster',
+                source: 'seamlessphoto',
+                minzoom: 14,
+                maxzoom: 23,
+            });
+
+            // スライダーで空中写真レイヤの不透明度を制御
+
+            // 不透明度の初期表示
+            map.setPaintProperty(
+                'seamlessphoto',
+                'raster-opacity',
+                0.5
+            );
+
+            sliderOpactiy.addEventListener('input', (e) => {
+                map.setPaintProperty(
+                    'seamlessphoto',
+                    'raster-opacity',
+                    parseInt(e.target.value, 10) / 100
+                );
+                sliderOpactiyValue.textContent = e.target.value + '%';
+            });
+
+            // 人口集中地区ベクトルタイル
+            map.addSource("did", {
+                type: "vector",
+                url: "pmtiles://" + PMTILES_DID_URL,
+                attribution: '<a href="https://www.e-stat.go.jp/gis">政府統計の総合窓口[e-Stat] 人口集中地区（2020年）</a>'
+            });
+
+            // 人口集中地区ポリゴンレイヤ
+            map.addLayer({
+                "id": "did-polygon",
+                "source": "did",
+                "source-layer": "2020_did_ddsw_0147_JGD2011fgb",
+                "type": "fill",
+                "paint": {
+                    'fill-color': 'rgb(255, 191, 0)',
+                    'fill-opacity': 0.2
+                }
+            });
+
+            // castles
+            map.addSource('castles', {
+                'type': 'geojson',
+                'data': './data/japan_castles_2023-05-01.geojson',
+                attribution: '<a href="https://www.openstreetmap.org/">© OpenStreetMap contributors</a>'
+            });
+
+            // castlesポイント
+            map.addLayer({
+                'id': 'castles-points-1',
+                'type': 'circle',
+                'source': 'castles',
+                'paint': {
+                    'circle-color': 'rgba(255, 50, 255, 1)',
+                    'circle-radius': 18,
+                    'circle-blur': 2.5,
+                    'circle-opacity': 0.6
+                }
+            });
+
+            // castlesポイント
+            map.addLayer({
+                'id': 'castles-points-2',
+                'type': 'circle',
+                'source': 'castles',
+                'paint': {
+                    'circle-color': 'rgba(255, 50, 255, 1)',
+                    'circle-radius': 9,
+                    'circle-blur': 1.5,
+                    'circle-opacity': 0.8
+                }
+            });
+
+            // ドコモ・バイクシェアポイント
+            map.addLayer({
+                'id': 'castles-points-3',
+                'type': 'circle',
+                'source': 'castles',
+                'paint': {
+                    'circle-color': 'rgba(255, 255, 255, 1)',
+                    'circle-radius': 1,
+                    'circle-blur': 0,
+                    'circle-opacity': 1
+                }
+            });
+
+            map.on('click', 'castles-points-1', (e) => {
+                var lng = e.lngLat.lng;
+                var lat = e.lngLat.lat;
+
+                new maplibregl.Popup()
+                    .setLngLat(e.lngLat)
+                    .setHTML(
+                        'クリック位置の座標: ' + lat.toFixed(7) + "," + lng.toFixed(7) + '<br>'
+                        + '<a href=\https://www.google.com/maps?q=' + lat + "," + lng + "&hl=ja' target='_blank'>🌎Google Maps</a>" + ' '
+                        + '<a href=\https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=' + lat + "," + lng + "&hl=ja' target='_blank'>📷Street View</a>"
+                    )
+                    .addTo(map);
+            });
+        });
+    </script>
+
+</body>
+
+</html>
