@@ -151,7 +151,7 @@
         let protocol = new pmtiles.Protocol();
         maplibregl.addProtocol("pmtiles", protocol.tile);
 
-        let PMTILES_DID_URL = "https://web-map-maplibre.s3.ap-northeast-1.amazonaws.com/traffic-signal-cycle-map/data/2020_did_ddsw_01-47_JGD2011.pmtiles";
+        let PMTILES_DID_URL = "https://xs489works.xsrv.jp/pmtiles-data/r2DID/2020_did_ddsw_01-47_JGD2011.pmtiles";
         const pd = new pmtiles.PMTiles(PMTILES_DID_URL)
 
         // this is so we share one instance across the JS code and the map renderer
